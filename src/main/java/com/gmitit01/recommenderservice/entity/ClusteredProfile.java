@@ -10,5 +10,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public class ClusteredProfile extends UuidIdentifiedEntity {
 
     private OnboardingProfileDTO onboardingProfile;
+    private ProcessedProfile processedProfile;
     private int cluster;
 }

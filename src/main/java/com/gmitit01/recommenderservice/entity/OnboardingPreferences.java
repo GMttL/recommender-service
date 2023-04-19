@@ -4,7 +4,7 @@ package com.gmitit01.recommenderservice.entity;
 import lombok.Data;
 
 @Data
-public class OnboardingPreferences {
+public class OnboardingPreferences extends UuidIdentifiedEntity {
     private Boolean smokersOK;
     private Boolean petsOK;
     private String Occupation;

@@ -4,7 +4,7 @@ import lombok.Data;
 
 
 @Data
-public class OnboardingProfile {
+public class OnboardingProfile extends UuidIdentifiedEntity {
     private String firstName;
     private String lastName;
     private Integer age;

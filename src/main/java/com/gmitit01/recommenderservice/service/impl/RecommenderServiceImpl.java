@@ -7,54 +7,70 @@ import com.gmitit01.recommenderservice.entity.RecommendedUser;
 import com.gmitit01.recommenderservice.entity.TrainedModel;
 import com.gmitit01.recommenderservice.logic.Model;
 import com.gmitit01.recommenderservice.service.ClusteredProfileService;
-import com.gmitit01.recommenderservice.service.PreProcessingMetaService;
+import com.gmitit01.recommenderservice.service.RecommenderService;
 import com.gmitit01.recommenderservice.service.TrainedModelService;
 import com.gmitit01.recommenderservice.utils.CosineDistance;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Service
-public class RecommenderServiceImpl {
+public class RecommenderServiceImpl implements RecommenderService {
 
     private final Model model;
     private final CosineDistance cosineDistance;
     private final ClusteredProfileService clusteredProfileService;
-    private final PreProcessingMetaService preProcessingMetaService;
     private final TrainedModelService trainedModelService;
 
+
+    /***
+     *  Takes in a profile in the form of OnboardingProfileDTO
+     *  and returns a list of compatible users in the form of RecommendedUser
+     *  SORTED by their compatibility score (descending).
+     *
+     * @param inputUser -- The user for whom recommendations are to be made
+     *
+     * @return
+     */
     public List<RecommendedUser> recommendUsers(OnboardingProfileDTO inputUser) {
         // Preprocess the input user's data
-        ProcessedProfile processedInputUser = model.preprocessData(List.of(inputUser)).get(0);
+        ProcessedProfile processedInputUser = model.preProcessUserData(inputUser);
 
         // Fetch the latest trained model
         TrainedModel trainedModel = trainedModelService.getLatestModel();
 
         // Project the input user's data using PCA from the trained model
         double[] inputUserReduced = trainedModel.getPca().getProjection(model.getPCA_COMPONENTS()).apply(processedInputUser.toDoubleArray());
+        Double[] inputUserReducedDouble = Arrays.stream(inputUserReduced).
+                boxed().
+                toArray(Double[]::new);
 
         // Predict the cluster for the input user
-        int inputUserCluster = trainedModel.getClarans().predict(inputUserReduced);
+        int inputUserCluster = trainedModel.getClarans().predict(inputUserReducedDouble);
 
         // Fetch all the users belonging to the input user's cluster
         List<ClusteredProfile> clusteredProfiles = clusteredProfileService.getProfilesByCluster(inputUserCluster);
 
         // Calculate compatibility scores for each user in the cluster
-        List<RecommendedUser> recommendedUsers = clusteredProfiles.stream().map(clusteredProfile -> {
-            ProcessedProfile processedProfile = model.preprocessData(List.of(clusteredProfile.getOnboardingProfile())).get(0);
+        return clusteredProfiles.stream().map(clusteredProfile -> {
+            ProcessedProfile processedProfile = clusteredProfile.getProcessedProfile();
             double[] profileReduced = trainedModel.getPca().getProjection(model.getPCA_COMPONENTS()).apply(processedProfile.toDoubleArray());
-            double compatibilityScore = cosineDistance.d(inputUserReduced, profileReduced);
+            Double[] profileReducedDouble = Arrays.stream(profileReduced).
+                    boxed().
+                    toArray(Double[]::new);
+
+            double compatibilityScore = cosineDistance.d(inputUserReducedDouble, profileReducedDouble);
 
             return new RecommendedUser(clusteredProfile.getOnboardingProfile(), compatibilityScore);
-        }).collect(Collectors.toList());
-
-        // Sort the recommended users by their compatibility scores (descending)
-        recommendedUsers.sort(Comparator.comparingDouble(RecommendedUser::getCombatibilityScore).reversed());
-
-        return recommendedUsers;
+        })
+                .sorted(Comparator.comparingDouble(RecommendedUser::getCombatibilityScore)
+                .reversed()).
+                collect(Collectors.toList());
     }
 }

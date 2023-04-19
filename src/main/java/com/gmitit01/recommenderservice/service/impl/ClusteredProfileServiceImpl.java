@@ -35,4 +35,9 @@ public class ClusteredProfileServiceImpl implements ClusteredProfileService {
     public void deleteProfile(UUID uid) {
         repository.deleteById(uid);
     }
+
+    @Override
+    public List<ClusteredProfile> getProfilesByCluster(int inputUserCluster) {
+        return repository.findByCluster(inputUserCluster);
+    }
 }

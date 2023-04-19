@@ -81,14 +81,14 @@ class PreProcessingMetaServiceTest {
         preProcessingMeta.setUniqueOccupations(Set.of("Engineer", "Doctor", "Teacher"));
 
         // Set scaler parameters
-        preProcessingMeta.setAgeScalerMean(new double[]{35.0});
-        preProcessingMeta.setAgeScalerScale(new double[]{10.0});
-        preProcessingMeta.setBudgetScalerMean(new double[]{50000.0});
-        preProcessingMeta.setBudgetScalerScale(new double[]{10000.0});
-        preProcessingMeta.setMinTermScalerMean(new double[]{12.0});
-        preProcessingMeta.setMinTermScalerScale(new double[]{3.0});
-        preProcessingMeta.setMaxTermScalerMean(new double[]{36.0});
-        preProcessingMeta.setMaxTermScalerScale(new double[]{6.0});
+        preProcessingMeta.setAgeScalerMean(35.0);
+        preProcessingMeta.setAgeScalerScale(10.0);
+        preProcessingMeta.setBudgetScalerMean(50000.0);
+        preProcessingMeta.setBudgetScalerScale(10000.0);
+        preProcessingMeta.setMinTermScalerMean(12.0);
+        preProcessingMeta.setMinTermScalerScale(3.0);
+        preProcessingMeta.setMaxTermScalerMean(36.0);
+        preProcessingMeta.setMaxTermScalerScale(6.0);
 
         // Set amenities vectorizer vocabulary
         preProcessingMeta.setAmenitiesVectorizerVocabulary(List.of("Gym", "Swimming Pool", "Parking"));

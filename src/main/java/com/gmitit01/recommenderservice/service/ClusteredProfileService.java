@@ -17,4 +17,6 @@ public interface ClusteredProfileService {
 
     // Delete Profile
     void deleteProfile(UUID uid);
+
+    List<ClusteredProfile> getProfilesByCluster(int inputUserCluster);
 }

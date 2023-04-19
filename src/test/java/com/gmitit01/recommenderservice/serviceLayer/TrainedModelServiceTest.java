@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Sort;
 import smile.clustering.CLARANS;
 import smile.feature.extraction.PCA;
 
@@ -119,13 +120,16 @@ public class TrainedModelServiceTest {
 
         List<TrainedModel> trainedModels = Arrays.asList(trainedModel, trainedModel2);
 
-        when(trainedModelRepository.findAll()).thenReturn(trainedModels);
+        // Update the stubbing to include the sorting parameter
+        Sort sort = Sort.by(Sort.Direction.DESC, "date");
+        when(trainedModelRepository.findAll(sort)).thenReturn(trainedModels);
 
         List<TrainedModel> foundModels = trainedModelService.readModels();
 
         assertEquals(trainedModels, foundModels);
-        verify(trainedModelRepository, times(1)).findAll();
+        verify(trainedModelRepository, times(1)).findAll(sort);
     }
+
 
     @Test
     public void deleteModelTest() {

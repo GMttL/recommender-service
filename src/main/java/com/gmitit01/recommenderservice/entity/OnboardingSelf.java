@@ -6,7 +6,7 @@ import lombok.Data;
 import java.util.Set;
 
 @Data
-public class OnboardingSelf {
+public class OnboardingSelf extends UuidIdentifiedEntity {
     private Boolean smoker;
     private Boolean pets;
     private Integer budget;
