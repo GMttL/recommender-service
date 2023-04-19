@@ -1,20 +1,26 @@
-package com.gmitit01.recommenderservice.model;
+package com.gmitit01.recommenderservice.logic;
 
 
 import com.gmitit01.recommenderservice.entity.*;
 import com.gmitit01.recommenderservice.entity.DTO.OnboardingProfileDTO;
+import com.gmitit01.recommenderservice.service.ClusteredProfileService;
+import com.gmitit01.recommenderservice.service.PreProcessingMetaService;
+import com.gmitit01.recommenderservice.service.TrainedModelService;
 import com.gmitit01.recommenderservice.service.impl.ModelServiceImpl;
 import com.gmitit01.recommenderservice.utils.CosineDistance;
 import com.gmitit01.recommenderservice.utils.StandardScaler;
 import com.gmitit01.recommenderservice.utils.TfIdfVectorizer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
-import reactor.core.publisher.Mono;
 
 import smile.clustering.CLARANS;
 import smile.feature.extraction.PCA;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -27,29 +33,47 @@ public class Model {
     // Constants
     private final Integer K_CLUSTERS = 3;
     private final Integer MAX_NEIGHBOURS = 30;
+
+
+
     private final Integer PCA_COMPONENTS = 4;
 
     // Injections
     private final CosineDistance cosineDistance;
     private final ModelServiceImpl modelService;
+    private final TrainedModelService trainedModelService;
+    private final PreProcessingMetaService preProcessingMetaService;
+    private final ClusteredProfileService clusteredProfileService;
+
+    // Fields
+    private List<OnboardingProfileDTO> allUserData;
 
     @Scheduled(cron = "0 0 0 * * *") // This cron expression represents a daily task at midnight
     public void retrainModel() {
-        loadAndPreprocessData()
-                .flatMap(this::trainModel)
-                .flatMap(this::saveModel)
-                .subscribe();
+        loadData();
+        List<ProcessedProfile> preprocessedData = preprocessData(allUserData);
+        TrainedModel trainedModel = trainModel(preprocessedData);
+        saveModel(trainedModel);
     }
 
-    private Mono<List<ProcessedProfile>> loadAndPreprocessData() {
-        return modelService.fetchAllUserData()
-                .collectList()
-                .map(this::preprocessData);
+    // Setters
+    public void loadData(List<OnboardingProfileDTO> data) {
+        this.allUserData = data;
+    }
+
+    // Getters
+    public Integer getPCA_COMPONENTS() {
+        return PCA_COMPONENTS;
+    }
+
+
+    private void loadData() {
+        this.allUserData = modelService.fetchAllUserData();
     }
 
 
     private List<ProcessedProfile> preprocessData(List<OnboardingProfileDTO> userSet) {
-
+        // TODO: Create and Save PreProcessMetadata
         // 1. Remove duplicates
         List<OnboardingProfileDTO> distinctUsers = userSet.stream()
                 .distinct()
@@ -87,11 +111,15 @@ public class Model {
                     return userSelf.getMaxTerm();
                 }).toArray();
 
-        StandardScaler scaler = new StandardScaler();
-        scaler.fit(ageArray);
-        scaler.fit(budgetArray);
-        scaler.fit(minTermArray);
-        scaler.fit(maxTermArray);
+        StandardScaler ageScaler = new StandardScaler();
+        StandardScaler budgetScaler = new StandardScaler();
+        StandardScaler minTermScaler = new StandardScaler();
+        StandardScaler maxTermScaler = new StandardScaler();
+
+        ageScaler.fit(ageArray);
+        budgetScaler.fit(budgetArray);
+        minTermScaler.fit(minTermArray);
+        maxTermScaler.fit(maxTermArray);
 
         // 5. TF-IDF encoding for Amenities column
         TfIdfVectorizer vectorizer = new TfIdfVectorizer();
@@ -125,10 +153,10 @@ public class Model {
             processed.setOccupationEncoding(oneHotEncode(userProfile.getOccupation(), uniqueOccupations));
 
             // 4. Feature scaling: standardize age, budget, minTerm, and maxTerm using z-score
-            processed.setAge(scaler.transform(userProfile.getAge(), ageArray));
-            processed.setBudget(scaler.transform(userSelf.getBudget(), budgetArray));
-            processed.setMinTerm(scaler.transform(userSelf.getMinTerm(), minTermArray));
-            processed.setMaxTerm(scaler.transform(userSelf.getMaxTerm(), maxTermArray));
+            processed.setAge(ageScaler.transform(userProfile.getAge(), ageArray));
+            processed.setBudget(budgetScaler.transform(userSelf.getBudget(), budgetArray));
+            processed.setMinTerm(minTermScaler.transform(userSelf.getMinTerm(), minTermArray));
+            processed.setMaxTerm(maxTermScaler.transform(userSelf.getMaxTerm(), maxTermArray));
 
             // 5. TF-IDF encoding for Amenities column
             try {
@@ -148,11 +176,27 @@ public class Model {
             return processed;
         }).toList();
 
+        // Save PreProcessingMeta object
+        PreProcessingMeta preProcessingMeta = new PreProcessingMeta();
+        preProcessingMeta.setUniqueGenders(uniqueGenders);
+        preProcessingMeta.setUniqueOccupations(uniqueOccupations);
+        preProcessingMeta.setAgeScalerMean(ageScaler.getMean());
+        preProcessingMeta.setAgeScalerScale(ageScaler.getStdDev());
+        preProcessingMeta.setBudgetScalerMean(budgetScaler.getMean());
+        preProcessingMeta.setBudgetScalerScale(budgetScaler.getStdDev());
+        preProcessingMeta.setMinTermScalerMean(minTermScaler.getMean());
+        preProcessingMeta.setMinTermScalerScale(minTermScaler.getStdDev());
+        preProcessingMeta.setMaxTermScalerMean(maxTermScaler.getMean());
+        preProcessingMeta.setMaxTermScalerScale(maxTermScaler.getStdDev());
+        preProcessingMeta.setAmenitiesVectorizerVocabulary(vectorizer.getVocabulary());
+
+        preProcessingMetaService.createMeta(preProcessingMeta);
+
         return processedUsers;
     }
 
 
-    private Mono<TrainedModel> trainModel(List<ProcessedProfile> preprocessedData) {
+    private TrainedModel trainModel(List<ProcessedProfile> preprocessedData) {
         // Convert preprocessedData to a 2D array
         double[][] data = preprocessedData.stream()
                 .map(ProcessedProfile::toDoubleArray)
@@ -172,25 +216,46 @@ public class Model {
 
         CLARANS<Double[]> clarans = CLARANS.fit(convertedData, cosineDistance, K_CLUSTERS, MAX_NEIGHBOURS);
 
+        // Assign a cluster to each user and save the ClusteredProfile objects
+        for (int i = 0; i < convertedData.length; i++) {
+            int cluster = clarans.predict(convertedData[i]);
+            ClusteredProfile clusteredProfile = new ClusteredProfile();
+            clusteredProfile.setOnboardingProfile(allUserData.get(i));
+            clusteredProfile.setCluster(cluster);
+            clusteredProfileService.createProfile(clusteredProfile);
+        }
+
         // Create and return the trained model
-        TrainedModel trainedModel = new TrainedModel(reducedPCA, clarans);
-        return Mono.just(trainedModel);
+        return new TrainedModel(pca, clarans);
     }
 
 
-    private Mono<Void> saveModel(TrainedModel trainedModel) {
-        // Save the trained model
-
-        // return Mono<Void> to indicate completion
-        return Mono.empty();
+    private void saveModel(TrainedModel trainedModel) {
+        trainedModelService.saveModel(trainedModel);
     }
 
-    private void isModelExpired() {
-        // Check if the model is expired
-    }
+    private boolean isModelExpired() {
+        // Get the list of all models
+        List<TrainedModel> models = trainedModelService.readModels();
 
-    private void isModelTrained() {
-        // Check if the model is trained
+        // Check if there are any models
+        if (models.isEmpty()) {
+            return true;
+        }
+
+        // Get the latest model
+        TrainedModel latestModel = models.get(0);
+
+        // Convert the latest model's date to LocalDateTime
+        LocalDateTime modelDate = Instant.ofEpochMilli(latestModel.getDate().getTime())
+                .atZone(ZoneId.systemDefault())
+                .toLocalDateTime();
+
+        // Check if the latest model is older than 24 hours
+        LocalDateTime now = LocalDateTime.now();
+        long hoursSinceLastTraining = ChronoUnit.HOURS.between(modelDate, now);
+
+        return hoursSinceLastTraining >= 24;
     }
 
 

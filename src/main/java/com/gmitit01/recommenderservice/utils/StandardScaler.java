@@ -1,10 +1,12 @@
 package com.gmitit01.recommenderservice.utils;
 
+import lombok.Data;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 
 @Component
+@Data
 public class StandardScaler {
     private double mean;
     private double stdDev;

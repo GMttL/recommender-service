@@ -1,5 +1,6 @@
 package com.gmitit01.recommenderservice.utils;
 
+import lombok.Data;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -12,6 +13,7 @@ import org.apache.lucene.util.BytesRef;
 import java.io.IOException;
 import java.util.*;
 
+
 public class TfIdfVectorizer {
 
     private StandardAnalyzer analyzer;
@@ -22,6 +24,12 @@ public class TfIdfVectorizer {
         this.analyzer = new StandardAnalyzer();
         this.index = new ByteBuffersDirectory();
         this.vocabulary = new ArrayList<>();
+    }
+
+    public TfIdfVectorizer(List<String> vocabulary) {
+        this.analyzer = new StandardAnalyzer();
+        this.index = new ByteBuffersDirectory();
+        this.vocabulary = vocabulary;
     }
 
     public void fit(List<Set<String>> amenitiesList) throws IOException {
@@ -80,5 +88,9 @@ public class TfIdfVectorizer {
             }
         }
         return tfIdfVector;
+    }
+
+    public List<String> getVocabulary() {
+        return vocabulary;
     }
 }

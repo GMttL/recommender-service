@@ -1,9 +1,10 @@
 package com.gmitit01.recommenderservice.service;
 
 import com.gmitit01.recommenderservice.entity.DTO.OnboardingProfileDTO;
-import reactor.core.publisher.Flux;
+
+import java.util.List;
 
 public interface ModelService {
 
-    public Flux<OnboardingProfileDTO> fetchAllUserData();
+    public List<OnboardingProfileDTO> fetchAllUserData();
 }

@@ -6,8 +6,9 @@ import com.gmitit01.recommenderservice.service.ModelService;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 public class ModelServiceImpl implements ModelService {
@@ -19,27 +20,30 @@ public class ModelServiceImpl implements ModelService {
     }
 
     @Override
-    public Flux<OnboardingProfileDTO> fetchAllUserData() {
-        return fetchUserDataPage(0, 20)
-                .expand(response -> {
-                    if (response.getTotalElements() == response.getPageSize()) {
-                        return fetchUserDataPage(response.getPageNumber() + 1, response.getPageSize());
-                    }
-                    return Mono.empty();
-                })
-                .flatMapIterable(PagedResponseDTO::getContent);
+    public List<OnboardingProfileDTO> fetchAllUserData() {
+        List<OnboardingProfileDTO> allUserData = new ArrayList<>();
+        int page = 0;
+        int size = 20;
+        PagedResponseDTO<OnboardingProfileDTO> pagedResponse;
+
+        do {
+            pagedResponse = fetchUserDataPage(page, size);
+            allUserData.addAll(pagedResponse.getContent());
+            page++;
+        } while (pagedResponse.getTotalElements() == pagedResponse.getPageSize());
+
+        return allUserData;
     }
 
-
-    private Mono<PagedResponseDTO<OnboardingProfileDTO>> fetchUserDataPage(int page, int size) {
+    private PagedResponseDTO<OnboardingProfileDTO> fetchUserDataPage(int page, int size) {
         return webClient.get()
                 .uri(uriBuilder -> uriBuilder.path("/api/browsing/profiles")
                         .queryParam("page", page)
                         .queryParam("size", size)
                         .build())
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<>() {
-                });
+                .bodyToMono(new ParameterizedTypeReference<PagedResponseDTO<OnboardingProfileDTO>>() {
+                })
+                .block();
     }
-
 }
