@@ -1,6 +1,7 @@
 package com.gmitit01.recommenderservice.entity;
 
 import com.gmitit01.recommenderservice.entity.DTO.OnboardingProfileDTO;
+import com.gmitit01.recommenderservice.entity.utils.UuidIdentifiedEntity;
 import lombok.Data;
 import org.springframework.data.mongodb.core.mapping.Document;
 

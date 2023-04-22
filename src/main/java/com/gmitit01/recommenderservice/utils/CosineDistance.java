@@ -5,8 +5,13 @@ import smile.math.distance.Distance;
 
 @Component
 public class CosineDistance implements Distance<Double[]> {
+
     @Override
     public double d(Double[] doubles, Double[] t1) {
+        if (doubles.length != t1.length) {
+            throw new IllegalArgumentException("Input arrays have different lengths: " + doubles.length + " and " + t1.length);
+        }
+
         double dotProduct = 0.0;
         double normA = 0.0;
         double normB = 0.0;

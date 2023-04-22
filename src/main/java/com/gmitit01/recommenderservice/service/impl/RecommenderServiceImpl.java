@@ -1,18 +1,16 @@
 package com.gmitit01.recommenderservice.service.impl;
 
-import com.gmitit01.recommenderservice.entity.ClusteredProfile;
+import com.gmitit01.recommenderservice.entity.*;
 import com.gmitit01.recommenderservice.entity.DTO.OnboardingProfileDTO;
-import com.gmitit01.recommenderservice.entity.ProcessedProfile;
-import com.gmitit01.recommenderservice.entity.RecommendedUser;
-import com.gmitit01.recommenderservice.entity.TrainedModel;
 import com.gmitit01.recommenderservice.logic.Model;
 import com.gmitit01.recommenderservice.service.ClusteredProfileService;
 import com.gmitit01.recommenderservice.service.RecommenderService;
 import com.gmitit01.recommenderservice.service.TrainedModelService;
 import com.gmitit01.recommenderservice.utils.CosineDistance;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import smile.feature.extraction.PCA;
+import smile.math.matrix.Matrix;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -46,7 +44,13 @@ public class RecommenderServiceImpl implements RecommenderService {
         TrainedModel trainedModel = trainedModelService.getLatestModel();
 
         // Project the input user's data using PCA from the trained model
-        double[] inputUserReduced = trainedModel.getPca().getProjection(model.getPCA_COMPONENTS()).apply(processedInputUser.toDoubleArray());
+        PCAProperties pcaProperties = trainedModel.getPca();
+        // Create a Matrix object for projection, which is the identity matrix since we're not applying any transformations
+        Matrix projectionMatrix = Matrix.eye(pcaProperties.getLoadings().getMatrix().nrow(), pcaProperties.getLoadings().getMatrix().ncol());
+
+        PCA pca = new PCA(pcaProperties.getMean(), pcaProperties.getEigvalues(), pcaProperties.getLoadings().getMatrix(), projectionMatrix);
+
+        double[] inputUserReduced = pca.getProjection(model.getPCA_COMPONENTS()).apply(processedInputUser.toDoubleArray());
         Double[] inputUserReducedDouble = Arrays.stream(inputUserReduced).
                 boxed().
                 toArray(Double[]::new);
@@ -60,7 +64,7 @@ public class RecommenderServiceImpl implements RecommenderService {
         // Calculate compatibility scores for each user in the cluster
         return clusteredProfiles.stream().map(clusteredProfile -> {
             ProcessedProfile processedProfile = clusteredProfile.getProcessedProfile();
-            double[] profileReduced = trainedModel.getPca().getProjection(model.getPCA_COMPONENTS()).apply(processedProfile.toDoubleArray());
+            double[] profileReduced = pca.getProjection(model.getPCA_COMPONENTS()).apply(processedProfile.toDoubleArray());
             Double[] profileReducedDouble = Arrays.stream(profileReduced).
                     boxed().
                     toArray(Double[]::new);

@@ -1,11 +1,14 @@
 package com.gmitit01.recommenderservice.entity;
 
 
+import com.gmitit01.recommenderservice.entity.utils.UuidIdentifiedEntity;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.util.Set;
 
 @Data
+@AllArgsConstructor
 public class OnboardingSelf extends UuidIdentifiedEntity {
     private Boolean smoker;
     private Boolean pets;

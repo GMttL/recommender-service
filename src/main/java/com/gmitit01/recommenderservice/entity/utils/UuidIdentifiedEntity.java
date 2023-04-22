@@ -1,4 +1,4 @@
-package com.gmitit01.recommenderservice.entity;
+package com.gmitit01.recommenderservice.entity.utils;
 
 import lombok.Getter;
 import org.springframework.data.annotation.Id;

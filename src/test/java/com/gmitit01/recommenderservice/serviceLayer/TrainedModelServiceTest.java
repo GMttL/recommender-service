@@ -1,6 +1,8 @@
 package com.gmitit01.recommenderservice.serviceLayer;
 
+import com.gmitit01.recommenderservice.entity.PCAProperties;
 import com.gmitit01.recommenderservice.entity.TrainedModel;
+import com.gmitit01.recommenderservice.entity.utils.MatrixWrapper;
 import com.gmitit01.recommenderservice.repository.TrainedModelRepository;
 import com.gmitit01.recommenderservice.service.impl.TrainedModelServiceImpl;
 import com.gmitit01.recommenderservice.utils.CosineDistance;
@@ -72,8 +74,15 @@ public class TrainedModelServiceTest {
         CosineDistance cosineDistance = new CosineDistance();
         CLARANS<Double[]> clarans = CLARANS.fit(convertedData, cosineDistance, 3, 20);
 
+        PCAProperties pcaProperties = new PCAProperties();
+        MatrixWrapper matrixWrapper = new MatrixWrapper(pca.loadings());
+        pcaProperties.setLoadings(matrixWrapper);
+        pcaProperties.setMean(pca.center());
+        pcaProperties.setEigvalues(pca.variance());
+
+
         // Create and return the fake trained model
-        return new TrainedModel(pca, clarans);
+        return new TrainedModel(pcaProperties, clarans);
     }
 
     @BeforeEach

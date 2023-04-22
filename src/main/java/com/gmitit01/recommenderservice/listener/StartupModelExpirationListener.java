@@ -6,6 +6,8 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+
 /***
  * This listener is applied at the startup of the application.
  * It checks whether the model is expired, and if so retrains it.
@@ -22,7 +24,11 @@ public class StartupModelExpirationListener implements ApplicationListener<Conte
     @Override
     public void onApplicationEvent(ContextRefreshedEvent event) {
         if (model.isModelExpired()) {
-            model.retrainModel();
+            try {
+                model.retrainModel();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 }

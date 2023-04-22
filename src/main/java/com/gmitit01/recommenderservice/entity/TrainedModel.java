@@ -1,10 +1,11 @@
 package com.gmitit01.recommenderservice.entity;
 
 
+import com.gmitit01.recommenderservice.entity.utils.UuidIdentifiedEntity;
 import lombok.Data;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import smile.clustering.CLARANS;
-import smile.feature.extraction.PCA;
 
 import java.util.Date;
 
@@ -12,11 +13,16 @@ import java.util.Date;
 @Document("TrainedModel")
 public class TrainedModel extends UuidIdentifiedEntity {
 
-    private PCA pca;
-    private CLARANS<Double []> clarans;
-    private final Date date = new Date();
+    @Field(value = "pca", write = Field.Write.ALWAYS)
+    private PCAProperties pca;
 
-    public TrainedModel(PCA pca, CLARANS<Double[]> clarans) {
+    @Field(value = "clarans", write = Field.Write.ALWAYS)
+    private CLARANS<Double []> clarans;
+
+    @Field(value = "date", write = Field.Write.ALWAYS)
+    private Date date = new Date();
+
+    public TrainedModel(PCAProperties pca, CLARANS<Double[]> clarans) {
         this.pca = pca;
         this.clarans = clarans;
     }

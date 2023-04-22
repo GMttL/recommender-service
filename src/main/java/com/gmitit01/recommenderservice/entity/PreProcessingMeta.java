@@ -1,10 +1,12 @@
 package com.gmitit01.recommenderservice.entity;
 
 
+import com.gmitit01.recommenderservice.entity.utils.UuidIdentifiedEntity;
 import lombok.Data;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Data
@@ -26,4 +28,5 @@ public class PreProcessingMeta extends UuidIdentifiedEntity {
 
     // Parameters for TfIdfVectorizer
     private List<String> amenitiesVectorizerVocabulary;
+    private Map<String, byte[]> serializedIndex;
 }
