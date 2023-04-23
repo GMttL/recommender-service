@@ -45,9 +45,7 @@ public class MongoConfig {
     public MongoCustomConversions customConversions() {
         return new MongoCustomConversions(Arrays.asList(
                 new CLARANSReadConverter(),
-                new CLARANSWriteConverter(),
-                new PCAPropReadConverter(),
-                new PCAPropWriteConverter()
+                new PCAPropReadConverter()
         ));
     }
 

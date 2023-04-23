@@ -30,7 +30,7 @@ public class RecommendationController {
         // TODO: The path needs to be changed once EUREKA is in place
         // Get User's Data from Onboarding Service
         OnboardingProfileDTO user = webClient.get()
-                .uri(uriBuilder -> uriBuilder.path("/api/browsing/profiles/{uid}").build(uid))
+                .uri(uriBuilder -> uriBuilder.path("/api/browsing/profile/{uid}").build(uid))
                 .retrieve()
                 .bodyToMono(OnboardingProfileDTO.class)
                 .block();
@@ -40,7 +40,4 @@ public class RecommendationController {
 
         return new ResponseEntity<>(matches, HttpStatus.OK);
     }
-
-
-
 }

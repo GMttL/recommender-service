@@ -1,6 +1,5 @@
 package com.gmitit01.recommenderservice.entity.utils;
 
-import org.springframework.data.annotation.PersistenceConstructor;
 import smile.math.matrix.Matrix;
 
 

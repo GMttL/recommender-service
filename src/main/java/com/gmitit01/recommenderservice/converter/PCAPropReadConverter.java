@@ -7,7 +7,6 @@ import org.bson.Document;
 import org.springframework.data.convert.ReadingConverter;
 import smile.math.matrix.Matrix;
 
-import java.util.Arrays;
 import java.util.List;
 
 @ReadingConverter

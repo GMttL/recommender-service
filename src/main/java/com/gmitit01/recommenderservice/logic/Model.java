@@ -40,7 +40,7 @@ import java.util.stream.Collectors;
 public class Model {
 
     // Constants
-    private final int K_CLUSTERS = 2;
+    private final int K_CLUSTERS = 2; // TODO: Change back to most appropriate value based on our EDA
     private final int MAX_NEIGHBOURS = 2; // TODO: Change back to 30 or a more appropriate value
     private final int PCA_COMPONENTS = 4;
     private static final int VALID_HOURS = 336;

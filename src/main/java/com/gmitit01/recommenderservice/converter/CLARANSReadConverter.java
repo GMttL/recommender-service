@@ -2,11 +2,13 @@ package com.gmitit01.recommenderservice.converter;
 
 import org.bson.Document;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.data.convert.ReadingConverter;
 import smile.clustering.CLARANS;
 import smile.math.distance.Distance;
 
 import java.util.List;
 
+@ReadingConverter
 public class CLARANSReadConverter implements Converter<Document, CLARANS> {
 
     @Override
