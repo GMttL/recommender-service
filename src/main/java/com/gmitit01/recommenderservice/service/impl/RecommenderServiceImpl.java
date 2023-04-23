@@ -69,12 +69,11 @@ public class RecommenderServiceImpl implements RecommenderService {
                     boxed().
                     toArray(Double[]::new);
 
-            double compatibilityScore = cosineDistance.d(inputUserReducedDouble, profileReducedDouble);
+            double compatibilityScore = cosineDistance.cosineSimilarity(inputUserReducedDouble, profileReducedDouble);
 
             return new RecommendedUser(clusteredProfile.getOnboardingProfile(), compatibilityScore);
         })
-                .sorted(Comparator.comparingDouble(RecommendedUser::getCombatibilityScore)
-                .reversed()).
-                collect(Collectors.toList());
+                .sorted(Comparator.comparingDouble(RecommendedUser::getCombatibilityScore).reversed())
+                .toList();
     }
 }

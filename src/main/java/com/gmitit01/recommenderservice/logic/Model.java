@@ -4,6 +4,7 @@ package com.gmitit01.recommenderservice.logic;
 import com.gmitit01.recommenderservice.entity.*;
 import com.gmitit01.recommenderservice.entity.DTO.OnboardingProfileDTO;
 import com.gmitit01.recommenderservice.entity.utils.MatrixWrapper;
+import com.gmitit01.recommenderservice.exception.IncompleteProfileException;
 import com.gmitit01.recommenderservice.service.ClusteredProfileService;
 import com.gmitit01.recommenderservice.service.PreProcessingMetaService;
 import com.gmitit01.recommenderservice.service.TrainedModelService;
@@ -32,6 +33,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 
 @RequiredArgsConstructor
@@ -40,10 +42,12 @@ import java.util.stream.Collectors;
 public class Model {
 
     // Constants
-    private final int K_CLUSTERS = 2; // TODO: Change back to most appropriate value based on our EDA
-    private final int MAX_NEIGHBOURS = 2; // TODO: Change back to 30 or a more appropriate value
-    private final int PCA_COMPONENTS = 4;
-    private static final int VALID_HOURS = 336;
+    private final int K_CLUSTERS = 3; // According to our EDA in R
+    private final int MAX_NEIGHBOURS = 50;
+    private final int PCA_COMPONENTS = 3;
+
+    // 12 weeks SO that the examiners don't have to wait for it to train
+    private static final int VALID_HOURS = 2016;
 
     // Injections
     private final CosineDistance cosineDistance;
@@ -52,6 +56,8 @@ public class Model {
     private final PreProcessingMetaService preProcessingMetaService;
     private final ClusteredProfileService clusteredProfileService;
 
+    // Fields
+    List<OnboardingProfileDTO> userData;
 
     /***
      * This method is scheduled to run daily at midnight.
@@ -64,7 +70,7 @@ public class Model {
     public void retrainModel() throws IOException {
         log.info("Starting Model Training...");
 
-        List<OnboardingProfileDTO> userData = loadData();
+        userData = loadData();
         List<ProcessedProfile> preprocessedData = preprocessData(userData);
         TrainedModel trainedModel = trainModel(preprocessedData);
 
@@ -92,6 +98,7 @@ public class Model {
      * @return a feature vector called ProcessedProfile.
      */
     public ProcessedProfile preProcessUserData(OnboardingProfileDTO user) {
+        // TODO: this needs to retrieve the last meta data inserted in the db
         PreProcessingMeta meta = preProcessingMetaService.readMetas().get(0);
 
         return preprocessDataWithMeta(List.of(user), meta).get(0);
@@ -292,6 +299,9 @@ public class Model {
     /***
      * Where the actual preprocessing happens.
      *
+     * SIDE EFFECTS:
+     * -- will update the userDATA with the users it actually processed.
+     *  (this is in case there are users who have not filled out all the required fields)
      * @param userSet -- user or multiple users to be preprocessed
      * @param preProcessingMeta -- the metadata to be used in preprocessing
      *
@@ -301,12 +311,32 @@ public class Model {
         log.info("Preprocessing " + userSet.size() + " users...");
 
         // 1. Remove duplicates
-        List<OnboardingProfileDTO> distinctUsers = userSet.stream()
-                .distinct()
-                .toList();
+        Stream<OnboardingProfileDTO> userStream = userSet.stream()
+                .distinct();
+
+        if (userSet.size() == 1) {
+            OnboardingProfileDTO singleUser = userSet.get(0);
+            if (singleUser.getOnboardingSelf() == null || singleUser.getOnboardingProfile() == null || singleUser.getOnboardingPreferences() == null) {
+                throw new IncompleteProfileException("The single user has an incomplete profile");
+            }
+        } else {
+            userStream = userStream.filter(user -> user.getOnboardingSelf() != null && user.getOnboardingProfile() != null && user.getOnboardingPreferences() != null);
+        }
+
 
         // Preprocess each user and store the result in a new ProcessedProfile object
-        List<ProcessedProfile> processedUsers = distinctUsers.stream().map(user -> {
+        List<ProcessedProfile> processedUsers = userStream.map(user -> {
+
+            // note for developers:
+            // This will bring the big-O to N log N as contains uses binary search
+            // Much more efficient than creating another stream or copying the list
+            if (userData != null && !userData.contains(user)) {
+                userData.remove(user);
+                // TODO: refactor
+                // this code should be refactored to follow the S in SOLID
+                // the method has currently 2 responsibilities:
+            }
+
             ProcessedProfile processed = new ProcessedProfile();
 
             OnboardingSelf userSelf = user.getOnboardingSelf();
@@ -384,13 +414,6 @@ public class Model {
                 .map(ProcessedProfile::toDoubleArray)
                 .toArray(double[][]::new);
 
-        // TODO: Debug Purposes
-        // Calculate covariance matrix
-        double[][] covarianceMatrix = MathEx.cov(data);
-        System.out.println("Covariance matrix:");
-        for (double[] row : covarianceMatrix) {
-            System.out.println(Arrays.toString(row));
-        }
 
         // Apply PCA
         PCA pca = PCA.fit(data);

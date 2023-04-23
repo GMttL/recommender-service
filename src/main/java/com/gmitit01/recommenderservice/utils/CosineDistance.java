@@ -23,4 +23,9 @@ public class CosineDistance implements Distance<Double[]> {
         return 1 - (dotProduct / (Math.sqrt(normA) * Math.sqrt(normB)));
     }
 
+    public double cosineSimilarity(Double[] vec1, Double[] vec2) {
+        double cosineDist = d(vec1, vec2);
+        return 1 - cosineDist;
+    }
+
 }
