@@ -64,7 +64,7 @@ public class Model {
     public void retrainModel() throws IOException {
         log.info("Starting Model Training...");
 
-        List<OnboardingProfileDTO> userData = mockLoadData();
+        List<OnboardingProfileDTO> userData = loadData();
         List<ProcessedProfile> preprocessedData = preprocessData(userData);
         TrainedModel trainedModel = trainModel(preprocessedData);
 

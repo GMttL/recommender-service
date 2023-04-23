@@ -9,12 +9,13 @@ import smile.math.distance.Distance;
 import java.util.List;
 
 @ReadingConverter
-public class CLARANSReadConverter implements Converter<Document, CLARANS> {
+public class CLARANSReadConverter implements Converter<Document, CLARANS<Double[]>> {
 
     @Override
-    public CLARANS convert(Document source) {
+    public CLARANS<Double[]> convert(Document source) {
         double distortion = source.getDouble("distortion");
-        Object[] medoids = source.get("centroids", List.class).toArray();
+        List<List<Double>> medoidsList = source.get("centroids", List.class);
+        Double[][] medoids = medoidsList.stream().map(row -> row.toArray(Double[]::new)).toArray(Double[][]::new);
         int[] y = source.get("y", List.class).stream().mapToInt(i -> (int) i).toArray();
         String distanceClassName = source.get("distance", Document.class).get("_class", String.class);
 
@@ -26,6 +27,6 @@ public class CLARANSReadConverter implements Converter<Document, CLARANS> {
             e.printStackTrace();
         }
 
-        return new CLARANS(distortion, medoids, y, distance);
+        return new CLARANS<Double[]>(distortion, medoids, y, distance);
     }
 }

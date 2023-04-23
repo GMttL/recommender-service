@@ -32,7 +32,7 @@ public class MongoConfig {
         MongoMappingContext mongoMappingContext = new MongoMappingContext(); // Create a new instance of MongoMappingContext
         MappingMongoConverter mongoConverter = new MappingMongoConverter(dbRefResolver, mongoMappingContext);
         // Configure a replacement for dots in map keys
-        mongoConverter.setMapKeyDotReplacement("_");
+        mongoConverter.setMapKeyDotReplacement("___"); // DO NOT CHANGE THIS VALUE
 
         // Set the custom conversions to the MappingMongoConverter
         mongoConverter.setCustomConversions(customConversions());
