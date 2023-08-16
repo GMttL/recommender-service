@@ -1,0 +1,1026 @@
+---
+title: "BCM_Data"
+author: "Gabriel M"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# 1.Libraries
+
+```{r libs}
+library(readr)
+library(dplyr)
+library(treemap)
+library(tm)
+library(wordcloud)
+library(tidytext)
+library(wordcloud2)
+library(tidyr)
+library(text2vec)
+library(caret)
+library(plotly)
+library(cluster)
+library(Rtsne)
+library(fpc)
+library(factoextra)
+library(dendextend)
+library(dbscan)
+library(FNN)
+library(fpc)
+library(e1071)
+library(kernlab)
+library(igraph)
+library(apcluster)
+library(clue)
+```
+
+# 1.Cleaning
+
+```{r dataset}
+data <- read_csv('synthetic_data.csv', show_col_types = FALSE)
+data <- data[!duplicated(data), ]
+
+# Row index
+data$row_index <- 1:nrow(data)
+summary(data)
+head(data)
+```
+
+```{r pre_cleaning}
+# remove leading commas
+data <- data %>%
+  mutate_all(~gsub("^,", "", .))
+
+# remove double commas
+data <- data %>%
+  mutate_all(~gsub(",{2,}", ", ", .))
+```
+
+```{r data_head}
+# First look at our data
+head(data)
+```
+
+```{r data_sum0}
+# Summary of Data Prior to cleaning
+summary(data)
+```
+
+```{r data_isNA}
+# Summary of Missing Data
+summary(is.na(data))
+```
+
+```{r general_missing_data}
+## Drop columns First
+
+# Drop the 'Personal Description' column with missing values
+data <- data[, !(names(data) %in% "Personal Description")]
+data <- data[, !(names(data) %in% "name")]
+
+
+## Drop Rows
+
+# Drop rows with missing values in the following columns
+cols_to_check <- c('age', 'gender', 'language','Smokers OK?', 'Pets OK?', 'Amenities', 'room wanted', 'Budget', 'any pets', 'occupation', 'Occupation Req', 'gender', 'Max Term', 'Min Term')
+complete_rows <- complete.cases(data[, cols_to_check])
+data <- data[complete_rows, ]
+
+```
+
+```{r cleaning_00}
+
+
+# Standardise case
+data$gender <- tolower(data$gender)
+data$occupation <- tolower(data$occupation)
+data$language <- tolower(data$language)
+data$smoker <- tolower(data$smoker)
+data$`any pets` <- tolower(data$`any pets`)
+data$`room wanted` <- tolower(data$`room wanted`)
+data$`Smokers OK?` <- tolower(data$`Smokers OK?`)
+data$`Pets OK?` <- tolower(data$`Pets OK?`)
+data$`Occupation Req` <- tolower(data$`Occupation Req`)
+data$`Gender Req` <- tolower(data$`Gender Req`)
+
+
+```
+
+```{r appropriate_dtypes}
+## Change columns to more apropriate datatypes
+
+# make numeric features numeric
+data$age <- as.numeric(data$age)
+data$Budget <- as.numeric(data$Budget)
+data$`Min Age`<- as.numeric(data$`Min Age`)
+data$`Max Age` <- as.numeric(data$`Max Age`)
+data$`Min Term` <- as.numeric(data$`Min Term`)
+data$`Max Term` <- as.numeric(data$`Max Term`)
+
+# factorise features
+data$gender <- as.factor(data$gender)
+data$occupation <- as.factor(data$occupation)
+data$smoker <- as.factor(data$smoker)
+data$`Smokers OK?` <- as.factor(data$`Smokers OK?`)
+data$`any pets` <- as.factor(data$`any pets`)
+data$`Pets OK?` <- as.factor(data$`Pets OK?`)
+data$`Occupation Req` <- as.factor(data$`Occupation Req`)
+data$`room wanted` <- as.factor(data$`room wanted`)
+data$`Gender Req` <- as.factor(data$`Gender Req`)
+```
+
+```{r cleaning_01}
+# Remove extra whitespaces
+
+data$language <- trimws(data$language)
+data$interests <- trimws(data$interests)
+data$Areas <- trimws(data$Areas)
+data$Amenities <- trimws(data$Amenities)
+```
+
+```{r}
+write.csv(data, "cleaned_data_for_input.csv", row.names = FALSE)
+```
+
+# 2. Exploratory
+
+## 2.1 Original Dataset
+
+```{r}
+# Summary Statistics
+summary(data)
+```
+
+```{r num_viz_00}
+hist(data$age, main = "Age Distribution", xlab = "Age", col = "lightblue", border = "black")
+hist(data$Budget, main = "Budget Distribution", xlab = "Budget", col = "lightblue", border = "black")
+
+boxplot(data$age, main = "Age Box Plot", ylab = "Age", col = "lightblue", border = "black")
+boxplot(data$Budget, main = "Budget Box Plot", ylab = "Budget", col = "lightblue", border = "black")
+
+plot(data$age, data$Budget, main = "Age vs. Budget Scatter Plot", xlab = "Age", ylab = "Budget", col = "blue", pch = 20)
+
+```
+
+```{r cat_viz_00}
+# Visualising Categorical Variables
+
+barplot(table(data$gender), main = "Gender")
+barplot(table(data$occupation), main = "Occupation")
+barplot(table(data$smoker), main = "Is Smoker")
+barplot(table(data$`any pets`), main = "Has Pets")
+barplot(table(data$`room wanted`), main = "Room Wanted")
+barplot(table(data$`Smokers OK?`), main = "Are Smokers OK?")
+barplot(table(data$`Pets OK?`), main = "Are pets OK?")
+barplot(table(data$`Occupation Req`), main = "Occupation Required")
+barplot(table(data$`Gender Req`), main = "Gender Required")
+```
+
+```{r nat_viz_00, fig.width = 12, fig.height = 8}
+# Create a data frame with the counts for each nationality
+nationality_counts <- data.frame(table(data$nationality))
+colnames(nationality_counts) <- c("Nationality", "Count")
+
+# Create a treemap with the counts for each nationality
+treemap(nationality_counts, index = "Nationality", vSize = "Count", type = "index", title = "Nationalities")
+```
+
+```{r lang_viz_00, fig.margin = TRUE}
+# Create a table of language counts
+language_table <- table(data$language)
+
+set.seed(123)
+
+wordcloud(words = names(language_table),
+          freq = language_table,
+          min.freq = 25,
+          random.order = FALSE,
+          colors = brewer.pal(12, "Dark2"))
+title("Languages")
+```
+
+```{r interests_viz_00, fig.width = 12, fig.height = 8}
+
+set.seed(123)
+# create a vector of all interests
+all_interests <- unlist(strsplit(data$interests, ", "))
+
+# create a word frequency table
+interests_freq <- table(all_interests)
+
+# remove empty and short words
+interests_freq <- interests_freq[nchar(names(interests_freq)) > 2]
+
+# create a word cloud
+wordcloud(names(interests_freq), freq=interests_freq, min.freq=1, random.order=FALSE, colors=brewer.pal(8, "Dark2"), max.words = 100)
+title("Interests")
+```
+
+```{r interest_viz_01}
+interests_list <- strsplit(as.character(data$interests), ", ")
+all_interests <- unlist(interests_list)
+interests_freq <- table(all_interests)
+
+barplot(sort(interests_freq, decreasing = TRUE)[1:10], las = 2)
+```
+
+```{r amenities_viz_00, fig.width = 12, fig.height = 8}
+
+amenities <- data$Amenities
+
+# Create a data frame
+amenities_df <- data.frame(amenities)
+
+# Create a vector of all the amenities
+amenities <- paste0(amenities_df$amenities, collapse = ", ")
+
+# Replace commas with spaces
+amenities <- gsub(",", " ", amenities)
+
+
+# Split into words
+words <- unlist(strsplit(amenities, "\\s+"))
+
+# Remove empty strings
+words <- words[words != ""]
+
+# Remove entries with Room
+amenities_df$amenities <- gsub(",?room,?", "", amenities_df$amenities)
+
+
+# Generate wordcloud
+set.seed(13)
+wordcloud(words, min.freq = 2, random.order = FALSE, colors = brewer.pal(8, "Dark2"))
+
+title("Amenities Cloud")
+```
+
+```{r areas_viz_00, fig.width = 12, fig.height = 8}
+
+# create a vector of all the areas
+areas <- unlist(strsplit(paste0(data$Areas, collapse = ","), ","))
+
+
+# remove "zone", "north", "south", and "central" from the areas
+areas <- areas[!grepl("zone", areas, ignore.case = TRUE)]
+areas <- areas[!grepl("north", areas, ignore.case = TRUE)]
+areas <- areas[!grepl("south", areas, ignore.case = TRUE)]
+areas <- areas[!grepl("central", areas, ignore.case = TRUE)]
+
+# remove any trailing spaces
+areas <- trimws(areas)
+
+# create a frequency table of the areas
+freq_table <- table(areas)
+
+# generate the wordcloud
+set.seed(123)
+wordcloud(words = names(freq_table), freq = freq_table, max.words = 50, random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+
+title("Areas Cloud")
+```
+
+# 3.Feature Engineering
+
+## 3.1 Feature Selection
+
+Now that we have seen and understood the data we have better, we need to
+focus on features that contribute to compatibility between users.
+
+```{r utils00}
+extract_features <- function(data) {
+  # Select relevant columns
+  relevant_columns <- c('age', 'gender', 'occupation', 'smoker', 'any pets', 'Budget', 'Min Term', 'Max Term', 'Smokers OK?', 'Pets OK?', 'Amenities', "row_index")
+  extracted_features <- data[, relevant_columns]
+  return(extracted_features)
+}
+```
+
+```{r features_selection}
+data <- extract_features(data)
+```
+
+Language, Nationality, Areas, Min Age, and Max Age can be used as
+filters.
+
+## 3.2 Feature Encoding (Categorical)
+
+```{r feature_encoding}
+encode_categorical_features <- function(data) {
+  # Encoding binary categorical variables
+  data$smoker <- ifelse(data$smoker == "no", 0, 1)
+  data$`any pets` <- ifelse(data$`any pets` == "no", 0, 1)
+  data$`Smokers OK?` <- ifelse(data$`Smokers OK?` == "no", 0, 1)
+  data$`Pets OK?` <- ifelse(data$`Pets OK?` == "no", 0, 1)
+  
+  # One-hot encoding for gender and occupation
+  data_gender <- model.matrix(~ gender - 1, data = data)
+  data_occupation <- model.matrix(~ occupation - 1, data = data)
+
+  # Combine the encoded data
+  encoded_data <- cbind(data, data_gender, data_occupation)
+
+  # Remove the original categorical columns
+  encoded_data <- encoded_data %>% select(-gender, -occupation)
+
+  return(encoded_data)
+
+}
+
+data <- encode_categorical_features(data)
+summary(data)
+```
+
+## 3.3 Feature Scaling (Numeric)
+
+```{r feature_scaling}
+
+standardize_features <- function(data) {
+  numeric_cols <- c('age', 'Budget', 'Min Term', 'Max Term')
+  data_standardized <- data %>%
+    mutate(across(numeric_cols, ~scale(.x), .names = "{.col}"))
+
+  return(data_standardized)
+}
+
+# Function to create unique column names
+make_unique <- function(names) {
+  if (anyDuplicated(names)) {
+    for (i in 1:length(names)) {
+      if (any(names[i] == names[-i])) {
+        dupes <- which(names == names[i])
+        names[dupes] <- paste0(names[dupes], "_", seq_along(dupes))
+      }
+    }
+  }
+  return(names)
+}
+
+# Fix duplicate column names
+data <- data %>%
+  setNames(make_unique(colnames(data)))
+
+data <- standardize_features(data)
+```
+
+## 3.4 TF-IDF (Text)
+
+```{r tf_idf}
+
+encode_tfidf_text2vec <- function(data, include_interests = TRUE) {
+  # Function to encode a single column using text2vec
+  encode_column <- function(data, column) {
+    data_corpus <- data %>% pull(column)
+    
+    tokens <- lapply(data_corpus, function(x) strsplit(tolower(x), split = ",\\s*")[[1]])
+    
+    # There seem to be some annommalies with very low frequency in our text from the
+    # synthetic data generation. WE shall mitigate against this by only using terms
+    # with a frequency of at least N * 0.01
+    
+    vocab <- create_vocabulary(it = itoken(tokens)) %>%
+      prune_vocabulary(term_count_min = nrow(data) * 0.02)
+    
+    vectorizer <- vocab_vectorizer(vocab)
+    dtm <- create_dtm(it = itoken(tokens), vectorizer = vectorizer)
+    
+    tfidf <- TfIdf$new(norm = "l2", sublinear_tf = FALSE)
+    dtm_tfidf <- tfidf$fit_transform(dtm)
+    
+    tfidf_df <- as.data.frame(as.matrix(dtm_tfidf))
+    colnames(tfidf_df) <- paste0(column, "_", colnames(tfidf_df))
+    
+    return(tfidf_df)
+  }
+  
+  # Encode amenities
+  amenities_encoded <- encode_column(data, "Amenities")
+  
+  # Remove original amenities column
+  if("Amenities" %in% names(data)) {
+    data <- data[, !(names(data) %in% "Amenities")]
+  }
+  
+  data_encoded <- cbind(data, amenities_encoded)
+  
+  # Encode interests if requested
+  if (include_interests) {
+    interests_encoded <- encode_column(data, "interests")
+    
+    # Remove original interests column
+    if("interests" %in% names(data)) {
+      data_encoded <- data_encoded[, !(names(data_encoded) %in% "interests")]
+    }
+    
+    data_encoded <- cbind(data_encoded, interests_encoded)
+    
+  }
+  
+  return(data_encoded)
+}
+
+
+data <- encode_tfidf_text2vec(data, FALSE)
+```
+
+## 3.5 Outlier Detection
+
+```{r outliers}
+# Z-Score outlier detection
+detect_outliers_zscore <- function(data, threshold = 3, binary_vars = NULL) {
+  z_scores <- abs(scale(data))
+  
+  # Exclude binary variables from z-score calculation
+  if (!is.null(binary_vars)) {
+    z_scores <- z_scores[, !colnames(z_scores) %in% binary_vars]
+  }
+  
+  return(z_scores > threshold)
+}
+
+# List of binary categorical variables
+binary_vars <- c("smoker", "any pets", "Smokers OK?", "Pets OK?", "genderfemale", "gendermale",
+                 "occupationother", "occupationprofessional", "occupationstudent")
+
+outliers_zscore_data <- lapply(data[, -which(names(data) == 'row_index')], detect_outliers_zscore, binary_vars = binary_vars)
+
+outliers_zscore_data <- data.frame(outliers_zscore_data)
+
+# Remove outliers
+data <- data[!apply(outliers_zscore_data, 1, any),]
+
+```
+
+## 3.6 Interaction Features
+
+```{r}
+interaction_features <- function(data) {
+  # Create a new feature combining Min Term and Max Term
+  data$TermRange <- data$`Max Term` - data$`Min Term`
+
+  # Create interaction features between preferences and user characteristics
+  # data$SmokerInteraction <- data$smoker * data$`Smokers OK?`
+  # data$PetInteraction <- data$`any pets` * data$`Pets OK?`
+  return(data)
+}
+
+data <- interaction_features(data)
+```
+
+## 3.7 Record OG Data
+
+```{r merge_dset}
+# Keep a record of the data that we're using in original format
+og_data <- merge(data, data, by="row_index")
+og_data$row_index <- as.numeric(og_data$row_index)
+```
+
+## 3.8 Save CSV cleaned data
+
+```{r}
+data <- data[, !(names(data) == "row_index")]
+og_data <- og_data[, !(names(og_data) == "row_index")]
+```
+
+```{r save_csv}
+write.csv(data, "cleaned_data.csv", row.names = FALSE)
+write.csv(og_data, "cleaned_data_OG.csv", row.names = FALSE)
+
+data <- data[, !(names(data) %in% "row_index")]
+```
+
+## 3.9 Check Data and final touches
+
+```{r}
+summary(data)
+```
+
+# 4. Model Selection:
+
+# 4.1 Centroid Based Clustering
+
+#### Prediagnostics -- Hopkins Statistic
+
+```{r prediagnostics_hopkins}
+h_2fless <- get_clust_tendency(data, 100)
+h_2fless$hopkins_stat
+```
+
+As we can see the hopkins statistic gives us a result of about 0.88. A
+result of over 0.7 does tell us that the data has a tendency to cluster,
+therefore we pass the null-hypothesis.
+(<https://journal.r-project.org/articles/RJ-2022-055/>)
+
+The code below is extremely computationally intensive and will not work
+on a regular machine unless we reduce the number of observations
+considerably. We tried running it on a Macbook Pro 2.2 GHz Quad-Core
+Intel Core i7 with 16GB of RAM and it failed. As such we have reduced
+our data by K observations.
+
+```{r reduce_data_observations}
+# Randomly sampling of data to help with computations
+
+n <- nrow(data) 
+reduced_n <- n - 15000 
+
+# Generate a random sample of row indices
+set.seed(42) # Set a seed for reproducibility
+random_sample <- sample(n, reduced_n)
+
+# Subset the data using the sampled indices
+data <- data[random_sample, ]
+
+```
+
+##### Cosine Similarity Distance
+
+As the data is quite sparse and we are dealing with textual data as
+well, the distance function that gives us the best results is the cosine
+distance based on the cosine similarity. This could be due to the fact
+that we are dealing with term-frequency vectors. In our case, we believe
+this is partly true because the number of terms we are using is not that
+large but given the amount of data we have it is large enough to not
+fill the hyperspace adequately.
+
+(Vijay Kotu, Bala Deshpande, in Data Science (Second Edition), 2019)
+(<https://www.sciencedirect.com/science/article/abs/pii/B9780128147610000113>)
+
+```{r dist01}
+# Calculate Cosine Similarity distance matrix
+cosine_distance <- proxy::dist(data, method = "cosine")
+
+# Calculate Gower Distance
+#gower_distance <- proxy::dist(data, method = "Gower")
+```
+
+##### Calibinsky-Harabasz and Silhouette Score
+
+We are using the Calinsky-Harabasz and Silhouette Score to find the
+optimal number of clusters in our data.
+(<https://www.tandfonline.com/doi/abs/10.1080/03610927408827101>) -- CH
+([https://en.wikipedia.org/wiki/Silhouette\_(clustering)](https://en.wikipedia.org/wiki/Silhouette_(clustering)){.uri}
+-- SH
+
+```{r, find_k01 }
+# Calinsky-Harabasz and Silhouette
+max_k <- 10
+
+# Calculate the Euclidean distance matrix
+euclidean_distance <- dist(data)
+
+# Initialize the values for CH index and silhouette index
+ch_kmeans <- numeric(max_k)
+ch_pam <- numeric(max_k)
+ch_pam_gower <- numeric(max_k)
+silhouette_kmeans <- numeric(max_k)
+silhouette_pam <- numeric(max_k)
+silhouette_pam_gower <- numeric(max_k)
+
+for (k in 2:max_k) {
+  # K-means clustering with Euclidean distance
+  kmeans_clustering <- kmeans(data, centers = k, nstart = 25)
+  
+  # PAM clustering with Cosine distance
+  pam_clustering <- pam(cosine_distance, k, diss=TRUE)
+  
+  # PAM clustering with Gower distance
+  #pam_clustering_gower <- pam(gower_distance, k, diss=TRUE)
+  
+  # Calculate clustering stats
+  kmeans_stats <- cluster.stats(euclidean_distance, kmeans_clustering$cluster)
+  pam_stats <- cluster.stats(cosine_distance, pam_clustering$clustering)
+  #pam_stats_gower <- cluster.stats(gower_distance, pam_clustering_gower$clustering)
+  
+  # Store CH index and silhouette index values
+  ch_kmeans[k] <- kmeans_stats$ch
+  ch_pam[k] <- pam_stats$ch
+  #ch_pam_gower[k] <- pam_stats_gower$ch
+  silhouette_kmeans[k] <- kmeans_stats$avg.silwidth
+  silhouette_pam[k] <- pam_stats$avg.silwidth
+  #silhouette_pam_gower[k] <- pam_stats_gower$avg.silwidth
+}
+
+# Plot CH index
+plot(2:max_k, ch_kmeans[2:max_k], type = "b", col = "blue", xlab = "Number of clusters (K)", ylab = "CH index", main = "CH index for K-means and PAM", ylim = range(ch_kmeans[2:max_k], ch_pam[2:max_k], ch_pam_gower[2:max_k]))
+lines(2:max_k, ch_pam[2:max_k], type = "b", col = "red")
+lines(2:max_k, ch_pam_gower[2:max_k], type = "b", col = "green")
+legend("topright", legend = c("K-means (Euclidean)", "PAM (Cosine)", "PAM (Gower)"), col = c("blue", "red", "green"), pch = 1, lty = 1)
+
+# Plot silhouette index
+plot(2:max_k, silhouette_kmeans[2:max_k], type = "b", col = "blue", xlab = "Number of clusters (K)", ylab = "Silhouette index", main = "Silhouette index for K-means and PAM", ylim = range(silhouette_kmeans[2:max_k], silhouette_pam[2:max_k], silhouette_pam_gower[2:max_k]))
+lines(2:max_k, silhouette_pam[2:max_k], type = "b", col = "red")
+lines(2:max_k, silhouette_pam_gower[2:max_k], type = "b", col = "green")
+legend("topright", legend = c("K-means (Euclidean)", "PAM (Cosine)", "PAM (Gower)"), col = c("blue", "red", "green"), pch = 1, lty = 1)
+
+```
+
+```{r data_modl}
+# K Means and PAM model
+kmeans_result <-  kmeans(data, centers = 3, nstart = 25)
+pam_clustering <- pam(cosine_distance, 2, diss = TRUE)
+```
+
+```{r}
+km.sil <- silhouette(kmeans_result$cluster, dist(data))
+fviz_silhouette(km.sil)
+
+pam.sil <- silhouette(pam_clustering$clustering, cosine_distance)
+fviz_silhouette(pam.sil)
+```
+
+#### PCA
+
+Given the amount of data we have available at the moment and how sparse
+the hyperspace is considering the ratio of data to dimensions, we should
+try to reduce the dimensions whilst maintaining as much variance as
+possible. Introducing PCA:
+
+```{r pca21}
+# Performing PCA on our data
+pca <- prcomp(data, scale=FALSE)
+pca_data <- as.data.frame(pca$x[, 1:4])
+summary(pca)
+
+# Calculate Cosine Similarity distance matrix
+cosine_distance <- proxy::dist(pca_data, method = "cosine")
+```
+
+We can see above, in the summary of our PCA transformations, we will use
+the first 5 PCA components for our data to capture 74% of the variance.
+
+The code below is extremely computationally intensive and will not work
+on a regular machine unless we reduce the number of observations
+considerably. We tried running it on a Macbook Pro 2.2 GHz Quad-Core
+Intel Core i7 with 16GB of RAM and it failed.
+
+```{r kern_pca, eval=FALSE}
+# Kernel PCA -- Radial
+kernel_pca <- kpca(~., data, kernel = "rbfdot", features = ncol(data))
+
+# Get the eigenvalues
+eigenvalues <- kernel_pca@eig
+
+# Compute the cumulative variance
+cumulative_variance <- cumsum(eigenvalues) / sum(eigenvalues)
+print(cumulative_variance)
+
+# Choose the number of dimensions to retain
+n_dimensions <- 5 # Replace with your desired number of dimensions
+
+# Extract the reduced data from Kernel PCA
+reduced_data <- kernel_pca@rotated[, 1:n_dimensions]
+```
+
+```{r kern_pca2, eval=FALSE}
+pca_data <- kernel_pca@rotated[, 1:5]
+cosine_distance <- proxy::dist(pca_data, method="cosine")
+```
+
+The kernel method is computationally intensive and did not provide us
+with any improvement. We have decided that given the textual data in our
+features, a cumulative variance proportion of around 0.74 should be a
+good balance between pattern and noise.
+
+##### Finding the best K using the PCA Components.
+
+```{r find_k21}
+# Calinsky-Harabasz and Silhouette
+max_k <- 10
+
+# Calculate the Euclidean distance matrix
+euclidean_distance <- dist(pca_data)
+
+cosine_distance <- proxy::dist(pca_data, method="cosine")
+
+# Initialize the values for CH index and silhouette index
+ch_kmeans <- numeric(max_k)
+ch_pam <- numeric(max_k)
+ch_pam_gower <- numeric(max_k)
+silhouette_kmeans <- numeric(max_k)
+silhouette_pam <- numeric(max_k)
+silhouette_pam_gower <- numeric(max_k)
+
+for (k in 2:max_k) {
+  # K-means clustering with Euclidean distance
+  kmeans_clustering <- kmeans(pca_data, centers = k, nstart = 25)
+  
+  # PAM clustering with Cosine distance
+  pam_clustering <- pam(cosine_distance, k, diss=TRUE)
+  
+  # PAM clustering with Gower distance
+  #pam_clustering_gower <- pam(gower_distance, k, diss=TRUE)
+  
+  # Calculate clustering stats
+  kmeans_stats <- cluster.stats(euclidean_distance, kmeans_clustering$cluster)
+  pam_stats <- cluster.stats(cosine_distance, pam_clustering$clustering)
+  #pam_stats_gower <- cluster.stats(gower_distance, pam_clustering_gower$clustering)
+  
+  # Store CH index and silhouette index values
+  ch_kmeans[k] <- kmeans_stats$ch
+  ch_pam[k] <- pam_stats$ch
+  #ch_pam_gower[k] <- pam_stats_gower$ch
+  silhouette_kmeans[k] <- kmeans_stats$avg.silwidth
+  silhouette_pam[k] <- pam_stats$avg.silwidth
+  #silhouette_pam_gower[k] <- pam_stats_gower$avg.silwidth 
+}
+
+# Plot CH index
+plot(2:max_k, ch_kmeans[2:max_k], type = "b", col = "blue", xlab = "Number of clusters (K)", ylab = "CH index", main = "CH index for K-means and PAM", ylim = range(ch_kmeans[2:max_k], ch_pam[2:max_k], ch_pam_gower[2:max_k]))
+lines(2:max_k, ch_pam[2:max_k], type = "b", col = "red")
+lines(2:max_k, ch_pam_gower[2:max_k], type = "b", col = "green")
+legend("topright", legend = c("K-means (Euclidean)", "PAM (Cosine)", "PAM (Gower)"), col = c("blue", "red", "green"), pch = 1, lty = 1)
+
+# Plot silhouette index
+plot(2:max_k, silhouette_kmeans[2:max_k], type = "b", col = "blue", xlab = "Number of clusters (K)", ylab = "Silhouette index", main = "Silhouette index for K-means and PAM", ylim = range(silhouette_kmeans[2:max_k], silhouette_pam[2:max_k], silhouette_pam_gower[2:max_k]))
+lines(2:max_k, silhouette_pam[2:max_k], type = "b", col = "red")
+lines(2:max_k, silhouette_pam_gower[2:max_k], type = "b", col = "green")
+legend("topright", legend = c("K-means (Euclidean)", "PAM (Cosine)", "PAM (Gower)"), col = c("blue", "red", "green"), pch = 1, lty = 1)
+
+```
+
+K-Means with Euclidean is tapered in the CH index, and gives the SH
+score still suggest K=2 as the best option. PAM with Cosine CH suggest
+K=7 and SH suggest K=2.
+
+Given that the Calinksy-Harabasz index measures the degree of separation
+between clusters and Silhouette coefficient measures how similar an
+object is to its own cluster compared to other clusters, the silhouette
+coefficient is a much better measure for our purpose of matching similar
+users.
+
+```{r pca_model}
+# K Means and PAM model
+kmeans_result <- kmeans(pca_data, 3)
+pam_clustering <- pam(cosine_distance, 5, diss = TRUE)
+```
+
+```{r pca_mod_sil}
+km.sil <- silhouette(kmeans_result$cluster, dist(pca_data))
+fviz_silhouette(km.sil)
+
+pam.sil <- silhouette(pam_clustering$clustering, cosine_distance)
+fviz_silhouette(pam.sil)
+```
+
+The SH score we get with PAM and Cosine distance is clearly superior to
+Kmeans with Eucleadean. The main downside to using a PAM algorithm would
+be the computational cost, which is a consideration given that we need
+to implement this model in a real-time system. However, we could resort
+to using CLARANS which is a very efficient medoid-based algorithm.
+
+# 4.2 Hierarchical Clustering
+
+```{r h_dist02}
+# Calculate Cosine Similarity distance matrix
+h_cosine_distance <- proxy::dist(data, method = "cosine")
+```
+
+```{r h_dendrogram02}
+# Create dendrograms w various linkage methods and visualise
+
+# Complete linkage
+hc_complete <- hclust(h_cosine_distance, method = "complete")
+plot(hc_complete, main = "Dendrogram with Complete Linkage")
+
+# Average linkage
+hc_average <- hclust(h_cosine_distance, method = "average")
+plot(hc_average, main = "Dendrogram with Average Linkage")
+
+# Single linkage
+hc_single <- hclust(h_cosine_distance, method = "single")
+plot(hc_single, main = "Dendrogram with Single Linkage")
+
+# Ward's linkage
+hc_ward <- hclust(h_cosine_distance, method = "ward.D2")
+plot(hc_ward, main = "Dendrogram with Ward's Linkage")
+```
+
+```{r h_silhouette02}
+max_k <- 10
+linkage_methods <- c("complete", "average", "single", "ward.D2")
+silhouette_scores <- matrix(0, nrow = max_k - 1, ncol = 4, dimnames = list(NULL, c("Complete", "Average", "Single", "Ward")))
+
+for (k in 2:max_k) {
+  for (i in 1:length(linkage_methods)) {
+    linkage <- linkage_methods[i]
+    clustering <- cutree(hclust(h_cosine_distance, method = linkage), k)
+    silhouette_scores[k - 1, i] <- mean(silhouette(clustering, h_cosine_distance)[, 3])
+  }
+}
+
+plot(2:max_k, silhouette_scores[, "Complete"], type = "b", col = "blue", xlab = "Number of clusters (K)", ylab = "Average Silhouette Score", main = "Silhouette Scores for Different Linkage Methods", ylim = range(silhouette_scores))
+lines(2:max_k, silhouette_scores[, "Average"], type = "b", col = "red")
+lines(2:max_k, silhouette_scores[, "Single"], type = "b", col = "green")
+lines(2:max_k, silhouette_scores[, "Ward"], type = "b", col = "purple")
+legend("topright", legend = colnames(silhouette_scores), col = c("blue", "red", "green", "purple"), pch = 1, lty = 1)
+```
+
+Best K is 3 for Average and 3 for the Ward Linkage Methods.
+
+```{r best_h02}
+best_k <- 3
+best_linkage <- "ward.D2"
+hc_best <- hclust(h_cosine_distance, method = best_linkage)
+clusters <- cutree(hc_best, best_k)
+
+# Compute silhouette scores for the hierarchical clustering
+hc_sil <- silhouette(clusters, h_cosine_distance)
+
+# Visualize the silhouette plot
+fviz_silhouette(hc_sil)
+
+best_k <- 3
+best_linkage <- "average"
+hc_best <- hclust(h_cosine_distance, method = best_linkage)
+clusters <- cutree(hc_best, best_k)
+
+# Compute silhouette scores for the hierarchical clustering
+hc_sil <- silhouette(clusters, h_cosine_distance)
+
+# Visualize the silhouette plot
+fviz_silhouette(hc_sil)
+```
+
+# 4.3 Density Based Clustering
+
+```{r}
+# Assess whether data is suitable for Density Based Methods
+minPts <- 2 * ncol(data)
+cosine_distance <- proxy::dist(data, method = "cosine")
+optics_result <- optics(cosine_distance, minPts)
+plot(optics_result, main = "OPTICS Reachability Plot")
+```
+
+Data doesn't seem very well partitioned based on the OPTICS
+Visualisation.
+
+```{r epsilon00}
+# Find the best epsilon for DBSCAN
+minPts <- 2 * ncol(data)
+
+# Calculate k-NN distances
+knn_dist <- FNN::knn.dist(as.matrix(cosine_distance), k = minPts)
+
+# Plot k-NN distance plot
+dbscan::kNNdistplot(knn_dist, minPts)
+abline(h = 3.5, col="red")
+
+```
+
+The eps value above is way off. Our data is not that far apart, and it
+seems like we get a good as we can separation with an epsilon of 0.11 as
+below. I could have stopped when I saw the OPTICS plot but I wanted to
+give it a try regardless. Remember, the data is not particularly fond of
+this.
+
+```{r model_training01}
+eps <- 0.11
+
+# Run the fpc::dbscan algorithm with the precomputed distance matrix
+dbscan_result <- fpc::dbscan(cosine_distance, eps = eps, MinPts = minPts, method = "dist", showplot = FALSE)
+
+# Print the clustering result
+print(dbscan_result)
+```
+
+```{r silh_eval01}
+## This cannot eval with a single cluster
+dbscan_sil <- silhouette(dbscan_result$cluster, cosine_distance)
+fviz_silhouette(dbscan_sil)
+```
+
+Exactly as we thought, the data is not suited for density based
+clustering.
+
+# 4.4 Fuzzy Clustering
+
+```{r fz_cos}
+cosine_similarity <- 1 - cosine_distance
+```
+
+```{r fz_find_k}
+max_k <- 8
+silhouette_scores_euclidean <- numeric(max_k - 1)
+silhouette_scores_cosine <- numeric(max_k - 1)
+
+euclidean_distance <- dist(data)
+
+for (k in 2:max_k) {
+  # With Euclidean distance
+  fuzzy_result_euclidean <- cmeans(data, centers = k)
+  cluster_assignments_euclidean <- apply(fuzzy_result_euclidean$membership, 1, which.max)
+  clustering_stats_euclidean <- cluster.stats(euclidean_distance, cluster_assignments_euclidean)
+  silhouette_scores_euclidean[k - 1] <- clustering_stats_euclidean$avg.silwidth
+  
+  # With Cosine distance
+  fuzzy_result_cosine <- cmeans(cosine_similarity, centers = k)
+  cluster_assignments_cosine <- apply(fuzzy_result_cosine$membership, 1, which.max)
+  clustering_stats_cosine <- cluster.stats(cosine_distance, cluster_assignments_cosine)
+  silhouette_scores_cosine[k - 1] <- clustering_stats_cosine$avg.silwidth
+}
+
+plot(2:max_k, silhouette_scores_euclidean, type = "b", col = "blue", xlab = "Number of clusters", ylab = "Silhouette Width", ylim = range(silhouette_scores_euclidean, silhouette_scores_cosine))
+lines(2:max_k, silhouette_scores_cosine, type = "b", col = "red")
+legend("topright", legend = c("Euclidean", "Cosine"), col = c("blue", "red"), pch = 1, lty = 1, bty = "n")
+
+```
+
+```{r}
+best_k <- 2
+fuzzy_best <- cmeans(cosine_similarity, centers = best_k)
+cluster_assignments <- apply(fuzzy_best$membership, 1, which.max)
+fviz_silhouette(silhouette(cluster_assignments, cosine_distance))
+```
+
+Fuzzy results drop significantly as soon as we increase the number of
+clusters and provides us with a much worse silhouette score than PAM.
+
+# 4.5 Affinity Propagation Clustering
+
+```{r }
+# Calculate Cosine distance matrix
+cosine_distance <- proxy::dist(data, method = "cosine")
+
+# Compute the median distance
+sigma <- median(cosine_distance)
+
+# Calculate the Cosine similarity matrix
+cosine_similarity <- exp(-cosine_distance^2 / (2 * sigma^2))
+
+cos_sim_matrix <- as.matrix(cosine_similarity)
+
+# Perform Affinity Propagation clustering
+ap_result <- apcluster(cos_sim_matrix, convits=200, maxits=2000, lam=0.7)
+
+# Extract cluster assignments
+cluster_assignments <- ap_result@clusters
+
+# Convert list of cluster assignments to a single vector
+cluster_assignments_vector <- numeric(length(data))
+
+for (i in seq_along(cluster_assignments)) {
+  cluster_assignments_vector[cluster_assignments[[i]]] <- i
+}
+
+# Number of clusters
+num_clusters <- length(unique(cluster_assignments))
+
+
+# Calculate the silhouette width
+sil_width <- silhouette(cluster_assignments_vector, cosine_distance)
+fviz_silhouette(sil_width)
+
+# Print the number of clusters and average silhouette width
+cat("Number of clusters:", num_clusters, "\n")
+cat("Average silhouette width:", mean(sil_width[, "sil_width"]), "\n")
+```
+
+Although visually appealing, the silhouette score is not great and most
+of the clusters are very small. Beside the fact that it is very
+computationally expensive and it would require a lot of optimisation
+work to make it work in a high-throughput environment, the silhouette
+score is very low. This could be due to the assumption that our clusters
+are globular.
+
+# 4.6 Spectral Clustering
+
+```{r, eval=FALSE}
+sigma <- 1
+cosine_distance <- proxy::dist(data, method = "cosine")
+similarity_matrix <- exp(-cosine_distance^2 / (2 * sigma^2))
+similarity_matrix <- as.matrix(similarity_matrix)
+
+```
+
+```{r, eval=FALSE }
+max_clusters <- 7
+sil_widths <- numeric(max_clusters - 1)
+
+for (k in 2:max_clusters) {
+  spectral_clustering <- specc(as.matrix(similarity_matrix), centers = k)
+  cluster_assignments <- spectral_clustering@.Data
+  sil_width <- silhouette(cluster_assignments, cosine_distance)
+  sil_widths[k - 1] <- mean(sil_width[, "sil_width"])
+}
+
+plot(2:max_clusters, sil_widths, type = "b", main = "Silhouette method", xlab = "Number of clusters (k)", ylab = "Average silhouette width")
+```
+
+```{r, eval=FALSE}
+spectral_clustering <- specc(as.matrix(similarity_matrix), centers = 3)
+cluster_assignments <- spectral_clustering@.Data
+sil_width <- silhouette(cluster_assignments, cosine_distance)
+fviz_silhouette(sil_width)
+```
+
+# 5. Conclusion
+
+PAM with Cosine Distance gives us the best results. Once we reduce the
+dimensionality of the data we almost double our fit, this could be due
+to the 'curse of dimensionality' as we do not have anywhere near enough
+data points to fill a 20-dimension hyperspace. PCA might also be
+reducing a lot of noise in our data due to our high text-frequency
+dimensions.

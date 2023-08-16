@@ -19,7 +19,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import smile.clustering.CLARANS;
 import smile.feature.extraction.PCA;
-import smile.math.MathEx;
 import smile.math.matrix.Matrix;
 
 
@@ -70,7 +69,7 @@ public class Model {
     public void retrainModel() throws IOException {
         log.info("Starting Model Training...");
 
-        userData = loadData();
+        userData = removeRecordsWithMissingAmenities(loadData());
         List<ProcessedProfile> preprocessedData = preprocessData(userData);
         TrainedModel trainedModel = trainModel(preprocessedData);
 
@@ -231,6 +230,20 @@ public class Model {
 
         // Preprocess data using the created metadata
         return preprocessDataWithMeta(userSet, preProcessingMeta);
+    }
+
+
+    /***
+     * Takes in a list of profiles and checks for missing values in the amenities field.
+     *
+     * @param users
+     *
+     * @return a list of profiles with no missing values in the amenities field.
+     */
+    private List<OnboardingProfileDTO> removeRecordsWithMissingAmenities(List<OnboardingProfileDTO> users) {
+        return users.stream()
+                .filter(user -> user.getOnboardingSelf().getAmenities() != null && !user.getOnboardingSelf().getAmenities().isEmpty())
+                .toList();
     }
 
     /***
